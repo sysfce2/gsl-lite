@@ -38,7 +38,7 @@
 
 #define  gsl_lite_MAJOR  1
 #define  gsl_lite_MINOR  1
-#define  gsl_lite_PATCH  0
+#define  gsl_lite_PATCH  1
 
 #define  gsl_lite_VERSION  gsl_STRINGIFY(gsl_lite_MAJOR) "." gsl_STRINGIFY(gsl_lite_MINOR) "." gsl_STRINGIFY(gsl_lite_PATCH)
 
@@ -1173,7 +1173,19 @@
 
 #if gsl_HAVE( TYPE_TRAITS )
 
+#if defined( __cpp_consteval )
+# define gsl_DEFINE_ENUM_BITMASK_OPERATORS_LITERAL0_( ENUM )               \
+    [[maybe_unused]] [[nodiscard]] gsl_api inline constexpr bool           \
+    operator==( ENUM val, ::gsl_lite::detail::literal_zero ) noexcept      \
+    {                                                                      \
+        return val == ENUM( );                                             \
+    }
+#else
+# define gsl_DEFINE_ENUM_BITMASK_OPERATORS_LITERAL0_( ENUM )
+#endif // defined( __cpp_consteval )
+
 # define gsl_DEFINE_ENUM_BITMASK_OPERATORS_( ENUM )                        \
+    gsl_DEFINE_ENUM_BITMASK_OPERATORS_LITERAL0_( ENUM )                    \
     gsl_MAYBE_UNUSED gsl_NODISCARD gsl_api inline gsl_constexpr bool       \
     operator!( ENUM val ) gsl_noexcept                                     \
     {                                                                      \
@@ -1191,13 +1203,13 @@
         typedef ::gsl_lite::std11::underlying_type<ENUM>::type U;          \
         return ENUM( U( lhs ) | U( rhs ) );                                \
     }                                                                      \
-    gsl_MAYBE_UNUSED gsl_NODISCARD gsl_api inline gsl_constexpr ::gsl_lite::flags<ENUM>  \
+    gsl_MAYBE_UNUSED gsl_NODISCARD gsl_api inline gsl_constexpr ::gsl_lite::detail::flags<ENUM>  \
     operator&( ENUM lhs, ENUM rhs ) gsl_noexcept                           \
     {                                                                      \
         typedef ::gsl_lite::std11::underlying_type<ENUM>::type U;          \
         return ENUM( U( lhs ) & U( rhs ) );                                \
     }                                                                      \
-    gsl_MAYBE_UNUSED gsl_NODISCARD gsl_api inline gsl_constexpr ::gsl_lite::flags<ENUM>  \
+    gsl_MAYBE_UNUSED gsl_NODISCARD gsl_api inline gsl_constexpr ::gsl_lite::detail::flags<ENUM>  \
     operator^( ENUM lhs, ENUM rhs ) gsl_noexcept                           \
     {                                                                      \
         typedef ::gsl_lite::std11::underlying_type<ENUM>::type U;          \
@@ -1472,7 +1484,7 @@ namespace __cxxabiv1 { struct __cxa_eh_globals; extern "C" __cxa_eh_globals * __
 // Warning suppression macros:
 
 #if gsl_COMPILER_MSVC_VERSION >= 140 && ! gsl_COMPILER_NVCC_VERSION
-# define gsl_SUPPRESS_MSGSL_WARNING(expr)        [[gsl::suppress(expr)]]
+# define gsl_SUPPRESS_MSGSL_WARNING(expr)        [[gsl::suppress(#expr)]]
 # define gsl_SUPPRESS_MSVC_WARNING(code, descr)  __pragma(warning(suppress: code) )
 # define gsl_DISABLE_MSVC_WARNINGS(codes)        __pragma(warning(push))  __pragma(warning(disable: codes))
 # define gsl_RESTORE_MSVC_WARNINGS()             __pragma(warning(pop ))
@@ -2581,6 +2593,17 @@ using ::gsl_lite::std17::uncaught_exceptions;
 
 } // namespace std11
 
+namespace detail {
+
+#if defined( __cpp_consteval )
+struct literal_zero
+{
+    consteval literal_zero( int zero )
+    {
+        if( zero != 0 ) std::terminate();  // argument must be literal zero; if not, we cause a compile error by calling a runtime-only function
+    }
+};
+#endif // defined( __cpp_consteval )
 template< class EnumT >
 struct flags
 {
@@ -2593,16 +2616,28 @@ struct flags
     {
     }
 
+#if defined( __cpp_consteval )
+    gsl_api constexpr bool operator ==( literal_zero ) const noexcept
+    {
+        return value == value_type{ };
+    }
+#endif // defined( __cpp_consteval )
+
     gsl_api gsl_constexpr operator EnumT() const gsl_noexcept
     {
         return value;
     }
-
     gsl_api gsl_explicit gsl_constexpr operator bool() const gsl_noexcept
     {
         return value != value_type( );
     }
+    gsl_api gsl_constexpr bool operator !() const gsl_noexcept
+    {
+        return value == value_type( );
+    }
 };
+
+} // namespace detail
 
 #if gsl_STDLIB_CPP11_110
 
